@@ -1,6 +1,7 @@
 applications:
   - name: MCP-ABAP
-    memory: 256M
+    memory: 512M
+    random-route: true
     instances: 1
     path: .
     buildpacks:

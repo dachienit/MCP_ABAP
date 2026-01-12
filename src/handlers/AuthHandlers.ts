@@ -3,6 +3,10 @@ import { BaseHandler } from './BaseHandler.js';
 import type { ToolDefinition } from '../types/tools.js';
 
 export class AuthHandlers extends BaseHandler {
+  constructor(adtclient: any, private readonly onLogin?: (config: any) => Promise<any>) {
+    super(adtclient);
+  }
+
   getTools(): ToolDefinition[] {
     return [
       {
@@ -10,7 +14,16 @@ export class AuthHandlers extends BaseHandler {
         description: 'Authenticate with ABAP system',
         inputSchema: {
           type: 'object',
-          properties: {}
+          properties: {
+            SAP_URL: { type: 'string', description: 'SAP System URL' },
+            SAP_USER: { type: 'string', description: 'SAP Username' },
+            SAP_PASSWORD: { type: 'string', description: 'SAP Password' },
+            SAP_CLIENT: { type: 'string', description: 'SAP Client' },
+            SAP_LANGUAGE: { type: 'string', description: 'Language' },
+            NODE_TLS_REJECT_UNAUTHORIZED: { type: 'string', description: '0 to disable SSL verification' },
+            NO_PROXY: { type: 'string', description: 'No proxy list' }
+          },
+          required: ['SAP_URL', 'SAP_USER', 'SAP_PASSWORD']
         }
       },
       {
@@ -48,6 +61,19 @@ export class AuthHandlers extends BaseHandler {
   private async handleLogin(args: any) {
     const startTime = performance.now();
     try {
+      if (args && args.SAP_URL && this.onLogin) {
+        await this.onLogin(args);
+        this.trackRequest(startTime, true);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ message: "Login configuration updated and session initialized." })
+            }
+          ]
+        };
+      }
+
       const loginResult = await this.adtclient.login();
       this.trackRequest(startTime, true);
       return {
@@ -97,7 +123,7 @@ export class AuthHandlers extends BaseHandler {
       return {
         content: [
           {
-            type: 'text', 
+            type: 'text',
             text: JSON.stringify({ status: 'Session cleared' })
           }
         ]
