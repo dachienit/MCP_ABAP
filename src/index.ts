@@ -445,6 +445,14 @@ export class AbapAdtServer extends Server {
       process.env.NO_PROXY = config.NO_PROXY;
       process.env.no_proxy = config.NO_PROXY;
     }
+    if (config.HTTP_PROXY) {
+      process.env.HTTP_PROXY = config.HTTP_PROXY;
+      process.env.http_proxy = config.HTTP_PROXY;
+    }
+    if (config.HTTPS_PROXY) {
+      process.env.HTTPS_PROXY = config.HTTPS_PROXY;
+      process.env.https_proxy = config.HTTPS_PROXY;
+    }
 
     this.adtClient = new ADTClient(
       newConfig.SAP_URL,

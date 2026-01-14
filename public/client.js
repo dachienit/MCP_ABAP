@@ -63,6 +63,8 @@ function setupEventListeners() {
         const client = document.getElementById('sap-client').value;
         const lang = document.getElementById('sap-language').value;
         const skipSSL = document.getElementById('skip-ssl').checked;
+        const httpProxy = document.getElementById('http-proxy').value;
+        const noProxy = document.getElementById('no-proxy').value;
 
         if (!url || !user || !pass) {
             alert('Please fill in required fields');
@@ -75,7 +77,10 @@ function setupEventListeners() {
             SAP_PASSWORD: pass,
             SAP_CLIENT: client,
             SAP_LANGUAGE: lang,
-            NODE_TLS_REJECT_UNAUTHORIZED: skipSSL ? '0' : '1'
+            NODE_TLS_REJECT_UNAUTHORIZED: skipSSL ? '0' : '1',
+            HTTP_PROXY: httpProxy,
+            HTTPS_PROXY: httpProxy, // Use same proxy for HTTPS
+            NO_PROXY: noProxy
         };
 
         callTool('login', args);
