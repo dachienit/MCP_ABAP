@@ -468,7 +468,6 @@ export class AbapAdtServer extends Server {
 
     if (process.env.PORT && !forceStdio) {
       const app = express();
-      app.use(express.json());
       app.use(cors());
 
       // Serve static files from 'public' directory
