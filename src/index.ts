@@ -509,9 +509,12 @@ export class AbapAdtServer extends Server {
           return;
         }
 
+        console.error(`Received message for session: ${sessionId}`);
         const session = sessions.get(sessionId);
 
         if (!session) {
+          console.error(`Session not found: ${sessionId}`);
+          console.error(`Active sessions: ${Array.from(sessions.keys()).join(', ')}`);
           res.status(404).send("Session not found");
           return;
         }
