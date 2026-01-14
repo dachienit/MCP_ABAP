@@ -503,10 +503,15 @@ export class AbapAdtServer extends Server {
       });
 
       app.post('/messages', async (req, res) => {
-        const sessionId = req.query.sessionId as string;
+        let sessionId = req.query.sessionId as string;
         if (!sessionId) {
           res.status(400).send("Missing sessionId");
           return;
+        }
+
+        // Fix for potential double query params
+        if (sessionId.includes('?')) {
+          sessionId = sessionId.split('?')[0];
         }
 
         console.error(`Received message for session: ${sessionId}`);
