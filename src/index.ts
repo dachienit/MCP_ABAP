@@ -89,25 +89,22 @@ export class AbapAdtServer extends Server {
       }
     );
 
-    // Initial config from environment
+    // Initial config from environment (default empty to force manual login)
     const config = {
-      SAP_URL: process.env.SAP_URL || '',
-      SAP_USER: process.env.SAP_USER || '',
-      SAP_PASSWORD: process.env.SAP_PASSWORD || '',
-      SAP_CLIENT: process.env.SAP_CLIENT || '',
-      SAP_LANGUAGE: process.env.SAP_LANGUAGE || ''
+      SAP_URL: '',
+      SAP_USER: '',
+      SAP_PASSWORD: '',
+      SAP_CLIENT: '',
+      SAP_LANGUAGE: ''
     };
 
     // Environment variables checking is now optional to allow login via parameters
-    const missingVars = ['SAP_URL', 'SAP_USER', 'SAP_PASSWORD'].filter(v => !process.env[v]);
-    if (missingVars.length > 0) {
-      console.error(`Note: Missing environment variables: ${missingVars.join(', ')}. Waiting for login parameters.`);
-    }
+    // We no longer rely on specific env vars for auto-login to ensure security and explicit connection
 
     this.adtClient = new ADTClient(
-      config.SAP_URL,
-      config.SAP_USER,
-      config.SAP_PASSWORD,
+      config.SAP_URL || 'https://example.com', // Dummy URL to satisfy constructor
+      config.SAP_USER || 'dummy',              // Dummy User
+      config.SAP_PASSWORD || 'dummy',          // Dummy Password
       config.SAP_CLIENT,
       config.SAP_LANGUAGE
     );
@@ -115,6 +112,8 @@ export class AbapAdtServer extends Server {
 
     this.initializeHandlers(this.adtClient);
   }
+
+  private isLoggedIn: boolean = false;
 
   private initializeHandlers(client: ADTClient) {
     // Initialize handlers
@@ -197,6 +196,7 @@ export class AbapAdtServer extends Server {
 
   private setupToolHandlers() {
     this.setRequestHandler(ListToolsRequestSchema, async () => {
+      // Always list tools, but they might return error if not logged in
       return {
         tools: [
           ...this.authHandlers.getTools(),
@@ -238,6 +238,14 @@ export class AbapAdtServer extends Server {
 
     this.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
+        const toolName = request.params.name;
+
+        // Check login status for all tools except 'login' and 'healthcheck'
+        // 'logout' and 'dropSession' are allowed to ensure we can clear state even if confused
+        if (!this.isLoggedIn && toolName !== 'login' && toolName !== 'healthcheck') {
+          throw new McpError(ErrorCode.InvalidRequest, "Please log in first using the 'login' tool.");
+        }
+
         let result: any;
 
         switch (request.params.name) {
@@ -245,6 +253,10 @@ export class AbapAdtServer extends Server {
           case 'logout':
           case 'dropSession':
             result = await this.authHandlers.handle(request.params.name, request.params.arguments);
+            // Update login state based on the action
+            if (request.params.name === 'logout' || request.params.name === 'dropSession') {
+              this.isLoggedIn = false;
+            }
             break;
           case 'transportInfo':
           case 'createTransport':
@@ -418,7 +430,7 @@ export class AbapAdtServer extends Server {
             result = await this.revisionHandlers.handle(request.params.name, request.params.arguments);
             break;
           case 'healthcheck':
-            result = { status: 'healthy', timestamp: new Date().toISOString() };
+            result = { status: 'healthy', timestamp: new Date().toISOString(), isLoggedIn: this.isLoggedIn };
             break;
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
@@ -467,7 +479,12 @@ export class AbapAdtServer extends Server {
     this.initializeHandlers(this.adtClient);
 
     // Attempt login with new client to verify and establish session
-    return await this.adtClient.login();
+    const result = await this.adtClient.login();
+
+    // If successful, mark as logged in
+    this.isLoggedIn = true;
+
+    return result;
   }
 
   async run() {
