@@ -495,8 +495,8 @@ export class AbapAdtServer extends Server {
       const app = express();
       app.use(cors());
 
-      // Serve static files from 'public' directory
-      app.use(express.static(path.join(__dirname, '../public')));
+      // Serve static files from 'client/dist' directory (Vite build)
+      app.use(express.static(path.join(__dirname, '../client/dist')));
 
       const port = process.env.PORT;
 
