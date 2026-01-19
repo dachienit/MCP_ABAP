@@ -104,7 +104,7 @@ export class AbapAdtServer extends Server {
     this.adtClient = new ADTClient(
       config.SAP_URL || 'https://example.com', // Dummy URL to satisfy constructor
       config.SAP_USER || 'dummy',              // Dummy User
-      config.SAP_PASSWORD || '',               // Optional Password (empty for SSO)
+      config.SAP_PASSWORD || 'SSO_PLACEHOLDER', // Dummy Password to satisfy ADTClient validation
       config.SAP_CLIENT,
       config.SAP_LANGUAGE
     );
@@ -453,7 +453,7 @@ export class AbapAdtServer extends Server {
     const newConfig = {
       SAP_URL: config.SAP_URL || process.env.SAP_URL || '',
       SAP_USER: config.SAP_USER || process.env.SAP_USER || '',
-      SAP_PASSWORD: config.SAP_PASSWORD || process.env.SAP_PASSWORD || '',
+      SAP_PASSWORD: config.SAP_PASSWORD || process.env.SAP_PASSWORD || 'SSO_PLACEHOLDER',
       SAP_CLIENT: config.SAP_CLIENT || process.env.SAP_CLIENT || '',
       SAP_LANGUAGE: config.SAP_LANGUAGE || process.env.SAP_LANGUAGE || ''
     };
