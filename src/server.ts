@@ -113,6 +113,41 @@ export class AbapAdtServer extends Server {
     this.initializeHandlers(this.adtClient);
   }
 
+  // Method to probe common SAP endpoints to find whitelisted paths
+  async runConnectivityProbe(baseUrl: string, agent: any) {
+    console.log(`[PROBE] Starting connectivity probe to ${baseUrl}...`);
+    const paths = [
+      '/sap/public/ping',
+      '/sap/bc/ping',
+      '/sap/bc/adt/discovery',
+      '/sap/bc/adt/compatibility/graph',
+      '/sap/bc/adt/core/discovery',
+      '/sap/bc/adt/oo/classes',
+      '/sap/bc/adt/programs/programs',
+      '/sap/public/info',
+    ];
+
+    const axios = require('axios');
+
+    for (const path of paths) {
+      try {
+        const url = `${baseUrl}${path}`;
+        console.log(`[PROBE] Checking GET ${url} ...`);
+        await axios.get(url, {
+          httpsAgent: agent, // Use the BTP proxy
+          httpAgent: agent,
+          timeout: 5000,     // Short timeout
+          validateStatus: () => true // Don't throw on error status
+        }).then((res: any) => {
+          console.log(`[PROBE] GET ${path} -> Status: ${res.status} ${res.statusText}`);
+        });
+      } catch (err: any) {
+        console.log(`[PROBE] GET ${path} -> FAILED: ${err.message}`);
+      }
+    }
+    console.log(`[PROBE] Probe completed.`);
+  }
+
   // New method to initialize BTP Connectivity with async token fetch
   async initBTPConnection() {
     console.log("[DEBUG] initBTPConnection called. Checking for VCAP_SERVICES...");
@@ -168,6 +203,10 @@ export class AbapAdtServer extends Server {
             } else {
               console.warn("WARNING: Proxy-Authorization token is empty!");
             }
+
+            // Run a probe to map accessible endpoints
+            await this.runConnectivityProbe(process.env.SAP_URL || '', proxyAgent);
+
           } catch (tokenError: any) {
             console.error("Failed to fetch Connectivity Service token:", tokenError.message);
           }
