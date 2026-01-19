@@ -55,6 +55,17 @@ const patchLibrary = () => {
             }
         }
 
+        // [NEW] Logger Patch: Log all outgoing requests to debug 405 errors
+        const requestMethodStart = 'async _request(url, options) {';
+        const requestMethodLog = 'async _request(url, options) { console.log("[ADT DEBUG] Request:", options.method || "GET", url);';
+
+        if (content.includes(requestMethodStart) && !content.includes('[ADT DEBUG] Request:')) {
+            console.log('[PATCH] Injecting debug logger into _request...');
+            content = content.replace(requestMethodStart, requestMethodLog);
+            fs.writeFileSync(filePath, content, 'utf8');
+            console.log('[PATCH] Successfully injected logger.');
+        }
+
         // [NEW] Patch to change login endpoint from compatibility/graph to discovery
         // This resolves 405 Method Not Allowed if Cloud Connector is restrictive
         const graphUrl = '"/sap/bc/adt/compatibility/graph"';

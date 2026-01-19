@@ -204,8 +204,7 @@ export class AbapAdtServer extends Server {
               console.warn("WARNING: Proxy-Authorization token is empty!");
             }
 
-            // Run a probe to map accessible endpoints
-            await this.runConnectivityProbe(process.env.SAP_URL || '', proxyAgent);
+            // Note: Probe moved to AuthHandlers to use user-provided URL
 
           } catch (tokenError: any) {
             console.error("Failed to fetch Connectivity Service token:", tokenError.message);

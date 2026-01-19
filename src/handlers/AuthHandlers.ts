@@ -62,6 +62,10 @@ export class AuthHandlers extends BaseHandler {
     const startTime = performance.now();
     try {
       if (args && args.SAP_URL && this.onLogin) {
+        // [PROBE] Run connectivity probe with user-provided URL before login
+        // This helps debug 405 errors by checking which paths are accessible
+        await this.runConnectivityProbe(args.SAP_URL, this.adtclient);
+
         await this.onLogin(args);
         this.trackRequest(startTime, true);
         return {
@@ -135,5 +139,55 @@ export class AuthHandlers extends BaseHandler {
         `Drop session failed: ${error.message || 'Unknown error'}`
       );
     }
+  }
+
+  // Probe method to check accessibility of common SAP paths
+  private async runConnectivityProbe(baseUrl: string, adtClient: any) {
+    if (!baseUrl) return;
+    console.log(`[PROBE] Starting connectivity probe to ${baseUrl}...`);
+
+    // Attempt to extract the proxy agent from the ADT Client's internal axios instance
+    // This relies on the "Brute-force" injection done in server.ts
+    let agent: any = undefined;
+    try {
+      // @ts-ignore
+      if (adtClient && adtClient.h && adtClient.h.httpclient && adtClient.h.httpclient.axios) {
+        // @ts-ignore
+        agent = adtClient.h.httpclient.axios.defaults.httpAgent;
+      }
+    } catch (e) {
+      console.warn("[PROBE] Could not retrieve proxy agent from ADT Client, probe might fail if proxy is required.");
+    }
+
+    const paths = [
+      '/sap/public/ping',
+      '/sap/bc/ping',
+      '/sap/bc/adt/discovery',
+      '/sap/bc/adt/compatibility/graph',
+      '/sap/bc/adt/core/discovery',
+      '/sap/bc/adt/oo/classes',
+      '/sap/bc/adt/programs/programs',
+      '/sap/public/info',
+    ];
+
+    const axios = require('axios');
+
+    for (const path of paths) {
+      try {
+        const url = `${baseUrl}${path}`;
+        console.log(`[PROBE] Checking GET ${url} ...`);
+        await axios.get(url, {
+          httpsAgent: agent,
+          httpAgent: agent,
+          timeout: 5000,
+          validateStatus: () => true
+        }).then((res: any) => {
+          console.log(`[PROBE] GET ${path} -> Status: ${res.status} ${res.statusText}`);
+        });
+      } catch (err: any) {
+        console.log(`[PROBE] GET ${path} -> FAILED: ${err.message}`);
+      }
+    }
+    console.log(`[PROBE] Probe completed.`);
   }
 }
