@@ -191,6 +191,26 @@ export class AbapAdtServer extends Server {
             clientOptions
           );
           this.adtClient.stateful = session_types.stateful;
+
+          // Brute-force: Manually inject proxy agent into the internal axios instance
+          // This ensures that even if AdtHTTP/toAxiosConfig drops it, it's restored on the defaults.
+          try {
+            // @ts-ignore - reaching into internals
+            const adtHttp = this.adtClient.httpClient;
+            // @ts-ignore
+            const axiosHttpClient = adtHttp.httpclient;
+            // @ts-ignore
+            if (axiosHttpClient && axiosHttpClient.axios) {
+              // @ts-ignore
+              axiosHttpClient.axios.defaults.httpAgent = proxyAgent;
+              // @ts-ignore
+              axiosHttpClient.axios.defaults.httpsAgent = proxyAgent;
+              console.log("Forcibly injected proxy agent into internal ADTClient axios defaults.");
+            }
+          } catch (injectError) {
+            console.warn("Failed to force inject proxy agent:", injectError);
+          }
+
           this.initializeHandlers(this.adtClient);
         }
       }
@@ -604,6 +624,26 @@ export class AbapAdtServer extends Server {
 
     // Attempt login with new client to verify and establish session
     const result = await this.adtClient.login();
+
+    // Brute-force: Manually inject proxy agent into the internal axios instance (for reLogin)
+    try {
+      if (proxyAgent) {
+        // @ts-ignore
+        const adtHttp = this.adtClient.httpClient;
+        // @ts-ignore
+        const axiosHttpClient = adtHttp.httpclient;
+        // @ts-ignore
+        if (axiosHttpClient && axiosHttpClient.axios) {
+          // @ts-ignore
+          axiosHttpClient.axios.defaults.httpAgent = proxyAgent;
+          // @ts-ignore
+          axiosHttpClient.axios.defaults.httpsAgent = proxyAgent;
+          console.log("Forcibly injected proxy agent into internal ADTClient axios defaults (reLogin).");
+        }
+      }
+    } catch (injectError) {
+      console.warn("Failed to force inject proxy agent in reLogin:", injectError);
+    }
 
     // If successful, mark as logged in
     this.isLoggedIn = true;
