@@ -8,7 +8,7 @@ export interface LogEntry {
 export interface LoginConfig {
     SAP_URL: string;
     SAP_USER: string;
-    SAP_PASSWORD: string;
+    SAP_PASSWORD?: string;
     SAP_CLIENT: string;
     SAP_LANGUAGE: string;
     NODE_TLS_REJECT_UNAUTHORIZED: string;

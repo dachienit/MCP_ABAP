@@ -46,7 +46,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, isLoading }) => {
     };
 
     const handleLogin = async () => {
-        if (!config.SAP_URL || !config.SAP_USER || !config.SAP_PASSWORD) {
+        if (!config.SAP_URL || !config.SAP_USER) {
             alert('Please fill in required fields');
             return;
         }

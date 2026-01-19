@@ -23,7 +23,7 @@ export class AuthHandlers extends BaseHandler {
             NODE_TLS_REJECT_UNAUTHORIZED: { type: 'string', description: '0 to disable SSL verification' },
             NO_PROXY: { type: 'string', description: 'No proxy list' }
           },
-          required: ['SAP_URL', 'SAP_USER', 'SAP_PASSWORD']
+          required: ['SAP_URL', 'SAP_USER']
         }
       },
       {
