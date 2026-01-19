@@ -101,55 +101,96 @@ export class AbapAdtServer extends Server {
     // Environment variables checking is now optional to allow login via parameters
     // We no longer rely on specific env vars for auto-login to ensure security and explicit connection
 
-    // Check for BTP Connectivity Proxy
-    let proxyAgent: any = undefined;
-    if (process.env.VCAP_SERVICES) {
-      try {
-        const vcapServices = JSON.parse(process.env.VCAP_SERVICES);
-        const connectivityService = vcapServices.connectivity ? vcapServices.connectivity[0] : null;
-
-        if (connectivityService) {
-          console.log("BTP Connectivity Service detected. Configuring proxy...");
-          const credentials = connectivityService.credentials;
-          const proxyHost = credentials.onpremise_proxy_host;
-          const proxyPort = credentials.onpremise_proxy_port;
-          const tokenServiceUrl = credentials.token_service_url;
-          const clientId = credentials.clientid;
-          const clientSecret = credentials.clientsecret;
-
-          // Note: In a full production implementation, we would fetch a JWT token from tokenServiceUrl
-          // and add it to the Proxy-Authorization header.
-          // For now, we set up the basic proxy agent which works for simple IP-based trusts or standard setups.
-          // If strict OAuth is enforced for the proxy, additional token fetching logic is needed.
-
-          const HttpsProxyAgent = require('https-proxy-agent').HttpsProxyAgent;
-          proxyAgent = new HttpsProxyAgent(`http://${proxyHost}:${proxyPort}`);
-
-          console.log(`Proxy configured: ${proxyHost}:${proxyPort}`);
-        }
-      } catch (error) {
-        console.error("Failed to parse VCAP_SERVICES or configure proxy:", error);
-      }
-    }
-
-    const clientOptions: any = {};
-    if (proxyAgent) {
-      clientOptions.httpsAgent = proxyAgent;
-      // Also set for HTTP if needed, though ADT is usually HTTPS
-      clientOptions.excludeDriver = true; // Use simple axios proxy if agent fails? No, agent is better.
-    }
-
     this.adtClient = new ADTClient(
       config.SAP_URL || 'https://example.com', // Dummy URL to satisfy constructor
       config.SAP_USER || 'dummy',              // Dummy User
       config.SAP_PASSWORD || 'SSO_PLACEHOLDER', // Dummy Password to satisfy ADTClient validation
       config.SAP_CLIENT,
-      config.SAP_LANGUAGE,
-      clientOptions
+      config.SAP_LANGUAGE
     );
     this.adtClient.stateful = session_types.stateful
 
     this.initializeHandlers(this.adtClient);
+  }
+
+  // New method to initialize BTP Connectivity with async token fetch
+  async initBTPConnection() {
+    if (!process.env.VCAP_SERVICES) return;
+
+    try {
+      const vcapServices = JSON.parse(process.env.VCAP_SERVICES);
+      const connectivityService = vcapServices.connectivity ? vcapServices.connectivity[0] : null;
+
+      if (connectivityService) {
+        console.log("BTP Connectivity Service detected. Configuring proxy with token...");
+        const credentials = connectivityService.credentials;
+        const proxyHost = credentials.onpremise_proxy_host;
+        const proxyPort = credentials.onpremise_proxy_port;
+        const tokenServiceUrl = credentials.token_service_url;
+        const clientId = credentials.clientid;
+        const clientSecret = credentials.clientsecret;
+
+        let proxyAgent;
+        if (tokenServiceUrl && clientId && clientSecret) {
+          try {
+            // Dynamic require to avoid build issues if axios not top-level
+            const axios = require('axios');
+            const tokenResponse = await axios.post(`${tokenServiceUrl}/oauth/token?grant_type=client_credentials`, null, {
+              headers: {
+                'Authorization': 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+              }
+            });
+            const connectivityToken = tokenResponse.data.access_token;
+
+            const HttpsProxyAgent = require('https-proxy-agent').HttpsProxyAgent;
+            proxyAgent = new HttpsProxyAgent({
+              host: proxyHost,
+              port: proxyPort,
+              headers: {
+                'Proxy-Authorization': `Bearer ${connectivityToken}`
+              }
+            });
+            console.log(`BTP Connectivity Proxy configured successfully (${proxyHost}:${proxyPort})`);
+          } catch (tokenError: any) {
+            console.error("Failed to fetch Connectivity Service token:", tokenError.message);
+          }
+        } else {
+          const HttpsProxyAgent = require('https-proxy-agent').HttpsProxyAgent;
+          proxyAgent = new HttpsProxyAgent(`http://${proxyHost}:${proxyPort}`);
+          console.log("Configured basic proxy (no token service found)");
+        }
+
+        if (proxyAgent) {
+          // Re-create ADTClient with the proxy
+          // We reuse the existing dummy config, the real one comes from reLogin anyway
+          // But importantly, we set the DEFAULT proxy for the instance
+          const clientOptions = {
+            httpsAgent: proxyAgent,
+            httpAgent: proxyAgent
+          };
+          const config = {
+            SAP_URL: process.env.SAP_URL || 'https://example.com',
+            SAP_USER: process.env.SAP_USER || 'dummy',
+            SAP_PASSWORD: process.env.SAP_PASSWORD || 'SSO_PLACEHOLDER',
+            SAP_CLIENT: process.env.SAP_CLIENT,
+            SAP_LANGUAGE: process.env.SAP_LANGUAGE
+          };
+
+          this.adtClient = new ADTClient(
+            config.SAP_URL,
+            config.SAP_USER,
+            config.SAP_PASSWORD,
+            config.SAP_CLIENT,
+            config.SAP_LANGUAGE,
+            clientOptions
+          );
+          this.adtClient.stateful = session_types.stateful;
+          this.initializeHandlers(this.adtClient);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to parse VCAP_SERVICES or configure proxy:", error);
+    }
   }
 
   private isLoggedIn: boolean = false;
@@ -512,6 +553,7 @@ export class AbapAdtServer extends Server {
     }
 
     // Check for BTP Connectivity Proxy (re-login)
+    // Reuse existing proxy if already configured in initBTPConnection, or detect again
     let proxyAgent: any = undefined;
     if (process.env.VCAP_SERVICES) {
       try {
@@ -532,8 +574,10 @@ export class AbapAdtServer extends Server {
     }
 
     const clientOptions: any = {};
+
     if (proxyAgent) {
       clientOptions.httpsAgent = proxyAgent;
+      clientOptions.httpAgent = proxyAgent;
     }
 
     this.adtClient = new ADTClient(
@@ -561,6 +605,8 @@ export class AbapAdtServer extends Server {
   async run() {
     const args = process.argv.slice(2);
     const forceStdio = args.includes('--stdio');
+
+    await this.initBTPConnection();
 
     if (process.env.PORT && !forceStdio) {
       const app = express();
