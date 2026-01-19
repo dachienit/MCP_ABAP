@@ -2,4 +2,12 @@
 dist
 node_modules
 package-lock.json
+
+# Typescript
+*.tsbuildinfo
+
+# Vite
+client/vite.config.js
+client/src/**/*.js
+!client/src/vite-env.d.ts
 *.code-workspace
