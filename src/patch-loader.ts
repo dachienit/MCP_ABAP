@@ -54,6 +54,20 @@ const patchLibrary = () => {
                 console.warn('[PATCH] Could not find insertion point in AdtHTTP.js');
             }
         }
+
+        // [NEW] Patch to change login endpoint from compatibility/graph to discovery
+        // This resolves 405 Method Not Allowed if Cloud Connector is restrictive
+        const graphUrl = '"/sap/bc/adt/compatibility/graph"';
+        const discoveryUrl = '"/sap/bc/adt/discovery"';
+
+        if (content.includes(graphUrl)) {
+            console.log('[PATCH] Replacing compatibility/graph with discovery endpoint...');
+            content = content.replace(new RegExp(graphUrl, 'g'), discoveryUrl);
+            fs.writeFileSync(filePath, content, 'utf8');
+            console.log('[PATCH] Successfully updated login endpoint to /sap/bc/adt/discovery');
+        } else if (content.includes(discoveryUrl)) {
+            console.log('[PATCH] Login endpoint is already set to /sap/bc/adt/discovery');
+        }
     } catch (error) {
         console.error('[PATCH] Error applying runtime patch:', error);
     }
