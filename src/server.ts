@@ -211,11 +211,11 @@ export class AbapAdtServer extends Server {
             // @ts-ignore
             const axiosHttpClient = adtHttp.httpclient;
             // @ts-ignore
-            if (axiosHttpClient) {
+            if (axiosHttpClient && axiosHttpClient.axios) {
               // @ts-ignore
-              axiosHttpClient.defaults.httpAgent = proxyAgent;
+              axiosHttpClient.axios.defaults.httpAgent = proxyAgent;
               // @ts-ignore
-              axiosHttpClient.defaults.httpsAgent = proxyAgent;
+              axiosHttpClient.axios.defaults.httpsAgent = proxyAgent;
               console.log("Forcibly injected proxy agent into internal ADTClient axios defaults.");
             }
           } catch (injectError) {
@@ -644,11 +644,11 @@ export class AbapAdtServer extends Server {
         // @ts-ignore
         const axiosHttpClient = adtHttp.httpclient;
         // @ts-ignore
-        if (axiosHttpClient) {
+        if (axiosHttpClient && axiosHttpClient.axios) {
           // @ts-ignore
-          axiosHttpClient.defaults.httpAgent = proxyAgent;
+          axiosHttpClient.axios.defaults.httpAgent = proxyAgent;
           // @ts-ignore
-          axiosHttpClient.defaults.httpsAgent = proxyAgent;
+          axiosHttpClient.axios.defaults.httpsAgent = proxyAgent;
           console.log("Forcibly injected proxy agent into internal ADTClient axios defaults (reLogin).");
         }
       }
