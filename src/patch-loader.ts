@@ -26,22 +26,33 @@ const patchLibrary = () => {
 
         let content = fs.readFileSync(filePath, 'utf8');
 
-        // Check if already patched
-        if (!content.includes('httpAgent: options.httpAgent,')) {
-            console.log('[PATCH] Patching abap-adt-api/build/AdtHTTP.js to support httpAgent...');
+        // Check if already SAFE patched
+        if (content.includes('...(options.httpAgent')) {
+            console.log('[PATCH] AdtHTTP.js is already patched with SAFE patch.');
+        } else {
+            console.log('[PATCH] Patching abap-adt-api/build/AdtHTTP.js to support httpAgent (SAFE mode)...');
 
-            const target = 'httpsAgent: options.httpsAgent,';
-            const replacement = 'httpAgent: options.httpAgent,\n        httpsAgent: options.httpsAgent,';
+            const safeReplacement = '...(options.httpAgent && { httpAgent: options.httpAgent }),\n        ...(options.httpsAgent && { httpsAgent: options.httpsAgent }),';
 
-            if (content.includes(target)) {
-                content = content.replace(target, replacement);
+            // Check for "Bad" patch (previous attempt)
+            const badPatchTarget = 'httpAgent: options.httpAgent,\n        httpsAgent: options.httpsAgent,';
+
+            // Check for Original code
+            const originalTarget = 'httpsAgent: options.httpsAgent,';
+
+            if (content.includes(badPatchTarget)) {
+                console.log('[PATCH] Upgrading from previous patch...');
+                content = content.replace(badPatchTarget, safeReplacement);
                 fs.writeFileSync(filePath, content, 'utf8');
-                console.log('[PATCH] Successfully patched AdtHTTP.js');
+                console.log('[PATCH] Successfully upgraded patch in AdtHTTP.js');
+            } else if (content.includes(originalTarget)) {
+                console.log('[PATCH] Applying fresh patch...');
+                content = content.replace(originalTarget, safeReplacement);
+                fs.writeFileSync(filePath, content, 'utf8');
+                console.log('[PATCH] Successfully applied patch to AdtHTTP.js');
             } else {
                 console.warn('[PATCH] Could not find insertion point in AdtHTTP.js');
             }
-        } else {
-            console.log('[PATCH] AdtHTTP.js is already patched.');
         }
     } catch (error) {
         console.error('[PATCH] Error applying runtime patch:', error);
