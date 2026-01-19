@@ -289,6 +289,7 @@ export class AbapAdtServer extends Server {
           case 'findObjectPath':
           case 'objectTypes':
           case 'reentranceTicket':
+          case 'searchPackage':
             result = await this.objectHandlers.handle(request.params.name, request.params.arguments);
             break;
           case 'classIncludes':
