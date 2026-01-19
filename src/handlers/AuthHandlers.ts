@@ -187,7 +187,10 @@ export class AuthHandlers extends BaseHandler {
     ];
 
     const axios = require('axios');
-    const methods = ['GET', 'POST', 'HEAD'];
+    const methods = ['GET', 'POST', 'HEAD', 'OPTIONS'];
+
+    // Log the exact URL and Port being used
+    console.log(`[PROBE] Target Base URL: '${baseUrl}'`);
 
     for (const path of paths) {
       for (const method of methods) {
@@ -203,9 +206,19 @@ export class AuthHandlers extends BaseHandler {
             validateStatus: () => true
           }).then((res: any) => {
             console.log(`[PROBE] ${method} ${path} -> Status: ${res.status} ${res.statusText}`);
+            if (res.status === 405) {
+              console.log(`[PROBE] Headers:`, JSON.stringify(res.headers, null, 2));
+              if (res.headers['allow']) {
+                console.log(`[PROBE] Allowed Methods: ${res.headers['allow']}`);
+              }
+            }
           });
         } catch (err: any) {
           console.log(`[PROBE] ${method} ${path} -> FAILED: ${err.message}`);
+          if (err.response) {
+            console.log(`[PROBE] Response Status: ${err.response.status}`);
+            console.log(`[PROBE] Response Headers:`, JSON.stringify(err.response.headers, null, 2));
+          }
         }
       }
     }
