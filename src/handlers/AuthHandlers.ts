@@ -187,21 +187,26 @@ export class AuthHandlers extends BaseHandler {
     ];
 
     const axios = require('axios');
+    const methods = ['GET', 'POST', 'HEAD'];
 
     for (const path of paths) {
-      try {
-        const url = `${baseUrl}${path}`;
-        console.log(`[PROBE] Checking GET ${url} ...`);
-        await axios.get(url, {
-          httpsAgent: agent,
-          httpAgent: agent,
-          timeout: 5000,
-          validateStatus: () => true
-        }).then((res: any) => {
-          console.log(`[PROBE] GET ${path} -> Status: ${res.status} ${res.statusText}`);
-        });
-      } catch (err: any) {
-        console.log(`[PROBE] GET ${path} -> FAILED: ${err.message}`);
+      for (const method of methods) {
+        try {
+          const url = `${baseUrl}${path}`;
+          console.log(`[PROBE] Checking ${method} ${url} ...`);
+          await axios({
+            method: method,
+            url: url,
+            httpsAgent: agent,
+            httpAgent: agent,
+            timeout: 5000,
+            validateStatus: () => true
+          }).then((res: any) => {
+            console.log(`[PROBE] ${method} ${path} -> Status: ${res.status} ${res.statusText}`);
+          });
+        } catch (err: any) {
+          console.log(`[PROBE] ${method} ${path} -> FAILED: ${err.message}`);
+        }
       }
     }
     console.log(`[PROBE] Probe completed.`);
