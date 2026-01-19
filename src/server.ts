@@ -50,6 +50,7 @@ config({ path: path.resolve(__dirname, '../.env') });
 
 export class AbapAdtServer extends Server {
   private adtClient: ADTClient;
+  private proxyAgent: any;
   private handlers: any[] = []; // Assuming BaseHandler is not defined, using any[] for now
   private authHandlers!: AuthHandlers;
   private transportHandlers!: TransportHandlers;
@@ -208,6 +209,7 @@ export class AbapAdtServer extends Server {
             // Note: Probe moved to AuthHandlers to use user-provided URL
             // Pass the proxy agent to AuthHandlers so the probe works
             if (this.authHandlers) {
+              this.proxyAgent = proxyAgent; // Cache for reLogin
               this.authHandlers.setProxyAgent(proxyAgent);
               console.log("Passed proxy agent to AuthHandlers.");
             }
@@ -637,9 +639,11 @@ export class AbapAdtServer extends Server {
     }
 
     // Check for BTP Connectivity Proxy (re-login)
-    // Reuse existing proxy if already configured in initBTPConnection, or detect again
-    let proxyAgent: any = undefined;
-    if (process.env.VCAP_SERVICES) {
+    // Reuse existing proxy if already configured in initBTPConnection
+    let proxyAgent: any = this.proxyAgent;
+
+    // Fallback: detect again if not found (though initBTPConnection should have caught it)
+    if (!proxyAgent && process.env.VCAP_SERVICES) {
       try {
         const vcapServices = JSON.parse(process.env.VCAP_SERVICES);
         const connectivityService = vcapServices.connectivity ? vcapServices.connectivity[0] : null;
@@ -727,6 +731,10 @@ export class AbapAdtServer extends Server {
         const sessionId = uuidv4();
         const transport = new SSEServerTransport(`/messages?sessionId=${sessionId}`, res);
         const server = new AbapAdtServer();
+        // [CRITICAL FIX] Initialize BTP connection for this session!
+        // This ensures the correct proxy agent (with token) is loaded for this instance.
+        // Otherwise, the new instance has no proxy configuration.
+        await server.initBTPConnection();
 
         sessions.set(sessionId, { server, transport });
 
