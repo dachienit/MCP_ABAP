@@ -149,6 +149,11 @@ export class AbapAdtServer extends Server {
   }
 
   private serializeResult(result: any) {
+    // If result is already formatted as MCP result (has content array), return it directly
+    if (result && typeof result === 'object' && Array.isArray(result.content)) {
+      return result;
+    }
+
     try {
       return {
         content: [{
