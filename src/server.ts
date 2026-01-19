@@ -115,11 +115,22 @@ export class AbapAdtServer extends Server {
 
   // New method to initialize BTP Connectivity with async token fetch
   async initBTPConnection() {
-    if (!process.env.VCAP_SERVICES) return;
+    console.log("[DEBUG] initBTPConnection called. Checking for VCAP_SERVICES...");
+    if (!process.env.VCAP_SERVICES) {
+      console.warn("[DEBUG] VCAP_SERVICES environment variable is NOT defined.");
+      return;
+    }
 
     try {
+      console.log("[DEBUG] VCAP_SERVICES found. Parsing...");
       const vcapServices = JSON.parse(process.env.VCAP_SERVICES);
+      console.log("[DEBUG] Available services in VCAP_SERVICES:", Object.keys(vcapServices));
+
       const connectivityService = vcapServices.connectivity ? vcapServices.connectivity[0] : null;
+
+      if (!connectivityService) {
+        console.warn("[DEBUG] 'connectivity' service NOT found in VCAP_SERVICES.");
+      }
 
       if (connectivityService) {
         console.log("BTP Connectivity Service detected. Configuring proxy with token...");
