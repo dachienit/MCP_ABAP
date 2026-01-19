@@ -49,7 +49,8 @@ process.env.HTTPS_PROXY = '';
 config({ path: path.resolve(__dirname, '../.env') });
 
 export class AbapAdtServer extends Server {
-  private adtClient!: ADTClient;
+  private adtClient: ADTClient;
+  private handlers: any[] = []; // Assuming BaseHandler is not defined, using any[] for now
   private authHandlers!: AuthHandlers;
   private transportHandlers!: TransportHandlers;
   private objectHandlers!: ObjectHandlers;
@@ -205,6 +206,11 @@ export class AbapAdtServer extends Server {
             }
 
             // Note: Probe moved to AuthHandlers to use user-provided URL
+            // Pass the proxy agent to AuthHandlers so the probe works
+            if (this.authHandlers) {
+              this.authHandlers.setProxyAgent(proxyAgent);
+              console.log("Passed proxy agent to AuthHandlers.");
+            }
 
           } catch (tokenError: any) {
             console.error("Failed to fetch Connectivity Service token:", tokenError.message);

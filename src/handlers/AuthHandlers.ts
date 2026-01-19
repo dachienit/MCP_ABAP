@@ -3,6 +3,8 @@ import { BaseHandler } from './BaseHandler.js';
 import type { ToolDefinition } from '../types/tools.js';
 
 export class AuthHandlers extends BaseHandler {
+  private proxyAgent: any;
+
   constructor(adtclient: any, private readonly onLogin?: (config: any) => Promise<any>) {
     super(adtclient);
   }
@@ -141,22 +143,36 @@ export class AuthHandlers extends BaseHandler {
     }
   }
 
+  // Method to receive proxy agent from main server
+  public setProxyAgent(agent: any) {
+    this.proxyAgent = agent;
+    console.log("[AuthHandlers] Proxy agent received.");
+  }
+
   // Probe method to check accessibility of common SAP paths
   private async runConnectivityProbe(baseUrl: string, adtClient: any) {
     if (!baseUrl) return;
     console.log(`[PROBE] Starting connectivity probe to ${baseUrl}...`);
 
-    // Attempt to extract the proxy agent from the ADT Client's internal axios instance
-    // This relies on the "Brute-force" injection done in server.ts
-    let agent: any = undefined;
-    try {
-      // @ts-ignore
-      if (adtClient && adtClient.h && adtClient.h.httpclient && adtClient.h.httpclient.axios) {
+    // Prefer explicitly passed proxy agent, fall back to brute-force extraction
+    let agent: any = this.proxyAgent;
+
+    if (!agent) {
+      try {
         // @ts-ignore
-        agent = adtClient.h.httpclient.axios.defaults.httpAgent;
+        if (adtClient && adtClient.h && adtClient.h.httpclient && adtClient.h.httpclient.axios) {
+          // @ts-ignore
+          agent = adtClient.h.httpclient.axios.defaults.httpAgent;
+        }
+      } catch (e) {
+        console.warn("[PROBE] Could not retrieve proxy agent from ADT Client, probe might fail if proxy is required.");
       }
-    } catch (e) {
-      console.warn("[PROBE] Could not retrieve proxy agent from ADT Client, probe might fail if proxy is required.");
+    }
+
+    if (agent) {
+      console.log("[PROBE] Using Proxy Agent for probe requests.");
+    } else {
+      console.warn("[PROBE] No Proxy Agent found! Probe will likely fail with ENOTFOUND.");
     }
 
     const paths = [
