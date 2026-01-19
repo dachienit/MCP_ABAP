@@ -78,6 +78,20 @@ export class ObjectHandlers extends BaseHandler {
                     type: 'object',
                     properties: {}
                 }
+            },
+            {
+                name: 'searchPackage',
+                description: 'Get all objects in a package',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        packageName: {
+                            type: 'string',
+                            description: 'Name of the package'
+                        }
+                    },
+                    required: ['packageName']
+                }
             }
         ];
     }
@@ -94,6 +108,8 @@ export class ObjectHandlers extends BaseHandler {
                 return this.handleObjectTypes(args);
             case 'reentranceTicket':
                 return this.handleReentranceTicket(args);
+            case 'searchPackage':
+                return this.handleSearchPackage(args);
             default:
                 throw new McpError(ErrorCode.MethodNotFound, `Unknown object tool: ${toolName}`);
         }
@@ -239,6 +255,35 @@ export class ObjectHandlers extends BaseHandler {
             throw new McpError(
                 ErrorCode.InternalError,
                 `Failed to get reentrance ticket: ${detailedError}`
+            );
+        }
+    }
+
+    async handleSearchPackage(args: any): Promise<any> {
+        const startTime = performance.now();
+        try {
+            // "DEVC/K" is the key for Package in NodeParents type
+            const objects = await this.adtclient.nodeContents("DEVC/K", args.packageName);
+            this.trackRequest(startTime, true);
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify({
+                            status: 'success',
+                            objects,
+                            message: 'Package contents retrieved successfully'
+                        }, null, 2)
+                    }
+                ]
+            };
+        } catch (error: any) {
+            this.trackRequest(startTime, false);
+            const errorMessage = error.message || 'Unknown error';
+            const detailedError = error.response?.data?.message || errorMessage;
+            throw new McpError(
+                ErrorCode.InternalError,
+                `Failed to search package: ${detailedError}`
             );
         }
     }
