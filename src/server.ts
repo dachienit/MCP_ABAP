@@ -703,3 +703,5 @@ server.run().catch((error) => {
   console.error('Failed to start MCP server:', error);
   process.exit(1);
 });
+
+// Force git verification change
