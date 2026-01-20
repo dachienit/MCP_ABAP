@@ -66,18 +66,29 @@ const patchLibrary = () => {
             console.log('[PATCH] Successfully injected logger.');
         }
 
-        // [NEW] Patch to change login endpoint from compatibility/graph to discovery
-        // This resolves 405 Method Not Allowed if Cloud Connector is restrictive
+        // [NEW] Patch to change login endpoint to be dynamic based on probe results
+        // This allows AuthHandlers to "discover" the working URL and set it in process.env.MCP_ABAP_LOGIN_PATH
         const graphUrl = '"/sap/bc/adt/compatibility/graph"';
         const discoveryUrl = '"/sap/bc/adt/discovery"';
+        const dynamicUrlCode = '(process.env.MCP_ABAP_LOGIN_PATH || "/sap/bc/adt/discovery")';
 
-        if (content.includes(graphUrl)) {
-            console.log('[PATCH] Replacing compatibility/graph with discovery endpoint...');
-            content = content.replace(new RegExp(graphUrl, 'g'), discoveryUrl);
+        // Check if we need to patch (either original GRAPH or our previous DISCOVERY patch)
+        if (content.includes(graphUrl) || (content.includes(discoveryUrl) && !content.includes('process.env.MCP_ABAP_LOGIN_PATH'))) {
+            console.log('[PATCH] Making login endpoint dynamic (process.env.MCP_ABAP_LOGIN_PATH)...');
+
+            // Limit replacement to the specific validation/login lines if possible, 
+            // but for now global replace is safer to catch all usages in AdtHTTP.js
+            if (content.includes(graphUrl)) {
+                content = content.replace(new RegExp(graphUrl, 'g'), dynamicUrlCode);
+            }
+            if (content.includes(discoveryUrl)) {
+                content = content.replace(new RegExp(discoveryUrl, 'g'), dynamicUrlCode);
+            }
+
             fs.writeFileSync(filePath, content, 'utf8');
-            console.log('[PATCH] Successfully updated login endpoint to /sap/bc/adt/discovery');
-        } else if (content.includes(discoveryUrl)) {
-            console.log('[PATCH] Login endpoint is already set to /sap/bc/adt/discovery');
+            console.log('[PATCH] Successfully made login endpoint dynamic.');
+        } else if (content.includes('process.env.MCP_ABAP_LOGIN_PATH')) {
+            console.log('[PATCH] Login endpoint is already dynamic.');
         }
     } catch (error) {
         console.error('[PATCH] Error applying runtime patch:', error);

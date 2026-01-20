@@ -66,7 +66,7 @@ export class AuthHandlers extends BaseHandler {
       if (args && args.SAP_URL && this.onLogin) {
         // [PROBE] Run connectivity probe with user-provided URL before login
         // This helps debug 405 errors by checking which paths are accessible
-        await this.runConnectivityProbe(args.SAP_URL, this.adtclient);
+        await this.runConnectivityProbe(args.SAP_URL, this.adtclient, args.SAP_CLIENT);
 
         await this.onLogin(args);
         this.trackRequest(startTime, true);
@@ -150,7 +150,7 @@ export class AuthHandlers extends BaseHandler {
   }
 
   // Probe method to check accessibility of common SAP paths
-  private async runConnectivityProbe(baseUrl: string, adtClient: any) {
+  private async runConnectivityProbe(baseUrl: string, adtClient: any, sapClient?: string) {
     if (!baseUrl) return;
     console.log(`[PROBE] Starting connectivity probe to ${baseUrl}...`);
 
@@ -195,33 +195,45 @@ export class AuthHandlers extends BaseHandler {
     for (const path of paths) {
       for (const method of methods) {
         try {
-          const url = `${baseUrl}${path}`;
+          let url = `${baseUrl}${path}`;
+          if (sapClient) {
+            const urlObj = new URL(url);
+            urlObj.searchParams.set('sap-client', sapClient);
+            url = urlObj.toString();
+          }
           console.log(`[PROBE] Checking ${method} ${url} ...`);
-          await axios({
+          const res = await axios({
             method: method,
             url: url,
             httpsAgent: agent,
             httpAgent: agent,
-            timeout: 5000,
+            timeout: 5000, // Reduced timeout for faster loop
             validateStatus: () => true
-          }).then((res: any) => {
-            console.log(`[PROBE] ${method} ${path} -> Status: ${res.status} ${res.statusText}`);
-            if (res.status === 405) {
-              console.log(`[PROBE] Headers:`, JSON.stringify(res.headers, null, 2));
-              if (res.headers['allow']) {
-                console.log(`[PROBE] Allowed Methods: ${res.headers['allow']}`);
-              }
-            }
           });
+
+          console.log(`[PROBE] ${method} ${path} -> Status: ${res.status} ${res.statusText}`);
+
+          // [AUTO-DISCOVERY] If we find a reachable endpoint (200 OK or 401/403 Auth Error but reachable)
+          // We consider this a candidate for login.
+          if (res.status === 200 || res.status === 401 || res.status === 403) {
+            console.log(`[PROBE] HIT! Found accessible endpoint: ${path}`);
+            process.env.MCP_ABAP_LOGIN_PATH = path;
+            console.log(`[PROBE] Auto-configured login path to: ${process.env.MCP_ABAP_LOGIN_PATH}`);
+            return; // Stop probing, we found a winner
+          }
+
+          // Probe logic for failures
+          if (res.status === 405 || res.status === 500) {
+            // Just log brief info for 405 to keep logs clean during auto-discovery
+            if (res.headers['allow']) {
+              console.log(`[PROBE] Allowed Methods for ${path}: ${res.headers['allow']}`);
+            }
+          }
         } catch (err: any) {
           console.log(`[PROBE] ${method} ${path} -> FAILED: ${err.message}`);
-          if (err.response) {
-            console.log(`[PROBE] Response Status: ${err.response.status}`);
-            console.log(`[PROBE] Response Headers:`, JSON.stringify(err.response.headers, null, 2));
-          }
         }
       }
     }
-    console.log(`[PROBE] Probe completed.`);
+    console.log(`[PROBE] Probe completed. No specific working endpoint configuration applied.`);
   }
 }
