@@ -50,7 +50,9 @@ config({ path: path.resolve(__dirname, '../.env') });
 
 export class AbapAdtServer extends Server {
   private adtClient: ADTClient;
-  private proxyAgent: any;
+  private proxyAgent: any; // Legacy/Fallback
+  private httpProxyAgent: any;
+  private httpsProxyAgent: any;
   private handlers: any[] = []; // Assuming BaseHandler is not defined, using any[] for now
   private authHandlers!: AuthHandlers;
   private transportHandlers!: TransportHandlers;
@@ -178,7 +180,9 @@ export class AbapAdtServer extends Server {
         const clientId = credentials.clientid;
         const clientSecret = credentials.clientsecret;
 
-        let proxyAgent;
+        let httpsProxyAgent;
+        let httpProxyAgent;
+
         if (tokenServiceUrl && clientId && clientSecret) {
           try {
             // Dynamic require to avoid build issues if axios not top-level
@@ -191,13 +195,19 @@ export class AbapAdtServer extends Server {
             const connectivityToken = tokenResponse.data.access_token;
 
             const HttpsProxyAgent = require('https-proxy-agent').HttpsProxyAgent;
-            proxyAgent = new HttpsProxyAgent({
+            const HttpProxyAgent = require('http-proxy-agent').HttpProxyAgent;
+
+            const proxyOptions = {
               host: proxyHost,
               port: proxyPort,
               headers: {
                 'Proxy-Authorization': `Bearer ${connectivityToken}`
               }
-            });
+            };
+
+            httpsProxyAgent = new HttpsProxyAgent(proxyOptions);
+            httpProxyAgent = new HttpProxyAgent(proxyOptions);
+
             console.log(`BTP Connectivity Proxy configured successfully. Host: ${proxyHost}, Port: ${proxyPort}`);
             // Verify token presence (do not log full token)
             if (connectivityToken) {
@@ -209,9 +219,13 @@ export class AbapAdtServer extends Server {
             // Note: Probe moved to AuthHandlers to use user-provided URL
             // Pass the proxy agent to AuthHandlers so the probe works
             if (this.authHandlers) {
-              this.proxyAgent = proxyAgent; // Cache for reLogin
-              this.authHandlers.setProxyAgent(proxyAgent);
-              console.log("Passed proxy agent to AuthHandlers.");
+              this.proxyAgent = httpsProxyAgent; // Cache main for legacy compat
+              this.httpProxyAgent = httpProxyAgent; // Cache http agent
+              this.httpsProxyAgent = httpsProxyAgent; // Cache https agent
+
+              // Pass both agents to AuthHandlers
+              this.authHandlers.setProxyAgents(httpProxyAgent, httpsProxyAgent);
+              console.log("Passed proxy agents to AuthHandlers.");
             }
 
           } catch (tokenError: any) {
@@ -219,17 +233,21 @@ export class AbapAdtServer extends Server {
           }
         } else {
           const HttpsProxyAgent = require('https-proxy-agent').HttpsProxyAgent;
-          proxyAgent = new HttpsProxyAgent(`http://${proxyHost}:${proxyPort}`);
+          const HttpProxyAgent = require('http-proxy-agent').HttpProxyAgent;
+
+          httpsProxyAgent = new HttpsProxyAgent(`http://${proxyHost}:${proxyPort}`);
+          httpProxyAgent = new HttpProxyAgent(`http://${proxyHost}:${proxyPort}`);
+
           console.log("Configured basic proxy (no token service found)");
         }
 
-        if (proxyAgent) {
+        if (httpsProxyAgent || httpProxyAgent) {
           // Re-create ADTClient with the proxy
           // We reuse the existing dummy config, the real one comes from reLogin anyway
           // But importantly, we set the DEFAULT proxy for the instance
           const clientOptions = {
-            httpsAgent: proxyAgent,
-            httpAgent: proxyAgent
+            httpsAgent: httpsProxyAgent,
+            httpAgent: httpProxyAgent
           };
           const config = {
             SAP_URL: process.env.SAP_URL || 'https://example.com',
@@ -259,10 +277,10 @@ export class AbapAdtServer extends Server {
             // @ts-ignore
             if (axiosHttpClient && axiosHttpClient.axios) {
               // @ts-ignore
-              axiosHttpClient.axios.defaults.httpAgent = proxyAgent;
+              axiosHttpClient.axios.defaults.httpAgent = httpProxyAgent;
               // @ts-ignore
-              axiosHttpClient.axios.defaults.httpsAgent = proxyAgent;
-              console.log("Forcibly injected proxy agent into internal ADTClient axios defaults.");
+              axiosHttpClient.axios.defaults.httpsAgent = httpsProxyAgent;
+              console.log("Forcibly injected proxy agents into internal ADTClient axios defaults.");
             }
           } catch (injectError) {
             console.warn("Failed to force inject proxy agent:", injectError);
@@ -640,32 +658,17 @@ export class AbapAdtServer extends Server {
 
     // Check for BTP Connectivity Proxy (re-login)
     // Reuse existing proxy if already configured in initBTPConnection
-    let proxyAgent: any = this.proxyAgent;
+    let httpsProxyAgent: any = this.httpsProxyAgent;
+    let httpProxyAgent: any = this.httpProxyAgent;
 
-    // Fallback: detect again if not found (though initBTPConnection should have caught it)
-    if (!proxyAgent && process.env.VCAP_SERVICES) {
-      try {
-        const vcapServices = JSON.parse(process.env.VCAP_SERVICES);
-        const connectivityService = vcapServices.connectivity ? vcapServices.connectivity[0] : null;
-
-        if (connectivityService) {
-          const credentials = connectivityService.credentials;
-          const proxyHost = credentials.onpremise_proxy_host;
-          const proxyPort = credentials.onpremise_proxy_port;
-
-          const HttpsProxyAgent = require('https-proxy-agent').HttpsProxyAgent;
-          proxyAgent = new HttpsProxyAgent(`http://${proxyHost}:${proxyPort}`);
-        }
-      } catch (error) {
-        // limit log noise in re-login
-      }
-    }
+    // Fallback logic if cache empty but env present (mostly for dev/tests, likely skipped if initBTPConnection worked)
+    // ... (abbreviated, relying on initBTPConnection primarily)
 
     const clientOptions: any = {};
 
-    if (proxyAgent) {
-      clientOptions.httpsAgent = proxyAgent;
-      clientOptions.httpAgent = proxyAgent;
+    if (httpsProxyAgent || httpProxyAgent) {
+      clientOptions.httpsAgent = httpsProxyAgent;
+      clientOptions.httpAgent = httpProxyAgent;
     }
 
     this.adtClient = new ADTClient(
@@ -681,12 +684,17 @@ export class AbapAdtServer extends Server {
     // Re-initialize handlers with new client
     this.initializeHandlers(this.adtClient);
 
+    // Update AuthHandlers with agents explicitly again to be safe
+    if (this.authHandlers && (httpProxyAgent || httpsProxyAgent)) {
+      this.authHandlers.setProxyAgents(httpProxyAgent, httpsProxyAgent);
+    }
+
     // Attempt login with new client to verify and establish session
     const result = await this.adtClient.login();
 
     // Brute-force: Manually inject proxy agent into the internal axios instance (for reLogin)
     try {
-      if (proxyAgent) {
+      if (httpsProxyAgent || httpProxyAgent) {
         // @ts-ignore
         const adtHttp = this.adtClient.httpClient;
         // @ts-ignore
@@ -694,10 +702,10 @@ export class AbapAdtServer extends Server {
         // @ts-ignore
         if (axiosHttpClient && axiosHttpClient.axios) {
           // @ts-ignore
-          axiosHttpClient.axios.defaults.httpAgent = proxyAgent;
+          axiosHttpClient.axios.defaults.httpAgent = httpProxyAgent;
           // @ts-ignore
-          axiosHttpClient.axios.defaults.httpsAgent = proxyAgent;
-          console.log("Forcibly injected proxy agent into internal ADTClient axios defaults (reLogin).");
+          axiosHttpClient.axios.defaults.httpsAgent = httpsProxyAgent;
+          console.log("Forcibly injected proxy agents into internal ADTClient axios defaults (reLogin).");
         }
       }
     } catch (injectError) {

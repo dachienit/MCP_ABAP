@@ -3,7 +3,8 @@ import { BaseHandler } from './BaseHandler.js';
 import type { ToolDefinition } from '../types/tools.js';
 
 export class AuthHandlers extends BaseHandler {
-  private proxyAgent: any;
+  private httpProxyAgent: any;
+  private httpsProxyAgent: any;
 
   constructor(adtclient: any, private readonly onLogin?: (config: any) => Promise<any>) {
     super(adtclient);
@@ -144,9 +145,10 @@ export class AuthHandlers extends BaseHandler {
   }
 
   // Method to receive proxy agent from main server
-  public setProxyAgent(agent: any) {
-    this.proxyAgent = agent;
-    console.log("[AuthHandlers] Proxy agent received.");
+  public setProxyAgents(httpAgent: any, httpsAgent: any) {
+    this.httpProxyAgent = httpAgent;
+    this.httpsProxyAgent = httpsAgent;
+    console.log("[AuthHandlers] Proxy agents received (HTTP + HTTPS).");
   }
 
   // Probe method to check accessibility of common SAP paths
@@ -154,25 +156,39 @@ export class AuthHandlers extends BaseHandler {
     if (!baseUrl) return;
     console.log(`[PROBE] Starting connectivity probe to ${baseUrl}...`);
 
-    // Prefer explicitly passed proxy agent, fall back to brute-force extraction
-    let agent: any = this.proxyAgent;
+    let agent: any;
+    const isHttps = baseUrl.toLowerCase().startsWith('https:');
 
+    if (isHttps) {
+      agent = this.httpsProxyAgent;
+    } else {
+      agent = this.httpProxyAgent;
+    }
+
+    // Fallback if not set explicitly via setProxyAgents (e.g. legacy or uninitialized)
     if (!agent) {
       try {
         // @ts-ignore
         if (adtClient && adtClient.h && adtClient.h.httpclient && adtClient.h.httpclient.axios) {
           // @ts-ignore
-          agent = adtClient.h.httpclient.axios.defaults.httpAgent;
+          // Try to guess from defaults
+          if (isHttps) {
+            // @ts-ignore
+            agent = adtClient.h.httpclient.axios.defaults.httpsAgent;
+          } else {
+            // @ts-ignore
+            agent = adtClient.h.httpclient.axios.defaults.httpAgent;
+          }
         }
       } catch (e) {
-        console.warn("[PROBE] Could not retrieve proxy agent from ADT Client, probe might fail if proxy is required.");
+        console.warn("[PROBE] Could not retrieve proxy agent from ADT Client fallback.");
       }
     }
 
     if (agent) {
-      console.log("[PROBE] Using Proxy Agent for probe requests.");
+      console.log(`[PROBE] Using ${isHttps ? 'HTTPS' : 'HTTP'} Proxy Agent for probe requests.`);
     } else {
-      console.warn("[PROBE] No Proxy Agent found! Probe will likely fail with ENOTFOUND.");
+      console.warn(`[PROBE] No ${isHttps ? 'HTTPS' : 'HTTP'} Proxy Agent found! Probe to ${baseUrl} might fail.`);
     }
 
     const paths = [
