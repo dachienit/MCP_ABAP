@@ -192,6 +192,11 @@ export class AuthHandlers extends BaseHandler {
     // Log the exact URL and Port being used
     console.log(`[PROBE] Target Base URL: '${baseUrl}'`);
 
+    // [DIAGNOSTIC] Add a control path to distinguish between SCC blocking (405/403) and SAP handling (404)
+    paths.push('/sap/nonexistent_test_12345');
+
+    let results: any[] = [];
+
     for (const path of paths) {
       for (const method of methods) {
         try {
@@ -202,38 +207,61 @@ export class AuthHandlers extends BaseHandler {
             url = urlObj.toString();
           }
           console.log(`[PROBE] Checking ${method} ${url} ...`);
+
           const res = await axios({
             method: method,
             url: url,
             httpsAgent: agent,
             httpAgent: agent,
-            timeout: 5000, // Reduced timeout for faster loop
-            validateStatus: () => true
+            timeout: 5000,
+            validateStatus: () => true,
+            responseType: 'text', // Force text to avoid parsing issues with error bodies
+            transformResponse: [(data: any) => data] // Do not parse JSON
           });
 
           console.log(`[PROBE] ${method} ${path} -> Status: ${res.status} ${res.statusText}`);
+          results.push({ path, method, status: res.status });
 
-          // [AUTO-DISCOVERY] If we find a reachable endpoint (200 OK or 401/403 Auth Error but reachable)
-          // We consider this a candidate for login.
-          if (res.status === 200 || res.status === 401 || res.status === 403) {
+          // [AUTO-DISCOVERY] Found accessible endpoint
+          if ((res.status === 200 || res.status === 401 || res.status === 403) && path !== '/sap/nonexistent_test_12345') {
             console.log(`[PROBE] HIT! Found accessible endpoint: ${path}`);
             process.env.MCP_ABAP_LOGIN_PATH = path;
             console.log(`[PROBE] Auto-configured login path to: ${process.env.MCP_ABAP_LOGIN_PATH}`);
-            return; // Stop probing, we found a winner
+            return;
           }
 
-          // Probe logic for failures
+          // Detail logging
           if (res.status === 405 || res.status === 500) {
-            // Just log brief info for 405 to keep logs clean during auto-discovery
             if (res.headers['allow']) {
               console.log(`[PROBE] Allowed Methods for ${path}: ${res.headers['allow']}`);
+            }
+            if (res.data) {
+              console.log(`[PROBE] Body: ${res.data.substring(0, 500)}`);
             }
           }
         } catch (err: any) {
           console.log(`[PROBE] ${method} ${path} -> FAILED: ${err.message}`);
+          results.push({ path, method, error: err.message });
         }
       }
     }
-    console.log(`[PROBE] Probe completed. No specific working endpoint configuration applied.`);
+
+    // [DIAGNOSIS REPORT]
+    console.log(`\n=== PROBE DIAGNOSIS ===`);
+    const sccBlock = results.some(r => r.path.includes('nonexistent') && (r.status === 403 || r.status === 405));
+    const sapReachable = results.some(r => r.path.includes('nonexistent') && r.status === 404);
+
+    if (sccBlock) {
+      console.log(`[CONCLUSION] Cloud Connector is BLANKET BLOCKING requests.`);
+      console.log(`Reason: Even the non-existent path returned 403/405 instead of 404.`);
+      console.log(`ACTION: Please check Cloud Connector Access Control. Verify 'Path and all sub-paths' is selected and Methods (GET/POST) are checked.`);
+    } else if (sapReachable) {
+      console.log(`[CONCLUSION] SAP Backend IS Reachable (404 confirmed).`);
+      console.log(`Reason: The non-existent path returned 404 as expected.`);
+      console.log(`Issue: The valid ADT paths are returning 405. This implies SAP ICF nodes are active but rejecting methods, OR intermediate filter.`);
+    } else {
+      console.log(`[CONCLUSION] Indeterminate. Check individual logs above.`);
+    }
+    console.log(`=======================\n`);
   }
 }
