@@ -53,6 +53,7 @@ export class AbapAdtServer extends Server {
   private proxyAgent: any; // Legacy/Fallback
   private httpProxyAgent: any;
   private httpsProxyAgent: any;
+  private proxyHeaders: any; // Cache headers for reLogin
   private handlers: any[] = []; // Assuming BaseHandler is not defined, using any[] for now
   private authHandlers!: AuthHandlers;
   private transportHandlers!: TransportHandlers;
@@ -197,12 +198,14 @@ export class AbapAdtServer extends Server {
             const HttpsProxyAgent = require('https-proxy-agent').HttpsProxyAgent;
             const HttpProxyAgent = require('http-proxy-agent').HttpProxyAgent;
 
+            const proxyHeaders = {
+              'Proxy-Authorization': `Bearer ${connectivityToken}`
+            };
+
             const proxyOptions = {
               host: proxyHost,
               port: proxyPort,
-              headers: {
-                'Proxy-Authorization': `Bearer ${connectivityToken}`
-              }
+              headers: proxyHeaders
             };
 
             httpsProxyAgent = new HttpsProxyAgent(proxyOptions);
@@ -222,10 +225,11 @@ export class AbapAdtServer extends Server {
               this.proxyAgent = httpsProxyAgent; // Cache main for legacy compat
               this.httpProxyAgent = httpProxyAgent; // Cache http agent
               this.httpsProxyAgent = httpsProxyAgent; // Cache https agent
+              this.proxyHeaders = proxyHeaders; // Cache headers
 
-              // Pass both agents to AuthHandlers
-              this.authHandlers.setProxyAgents(httpProxyAgent, httpsProxyAgent);
-              console.log("Passed proxy agents to AuthHandlers.");
+              // Pass both agents AND headers to AuthHandlers
+              this.authHandlers.setProxyAgents(httpProxyAgent, httpsProxyAgent, proxyHeaders);
+              console.log("Passed proxy agents and headers to AuthHandlers.");
             }
 
           } catch (tokenError: any) {
@@ -280,6 +284,13 @@ export class AbapAdtServer extends Server {
               axiosHttpClient.axios.defaults.httpAgent = httpProxyAgent;
               // @ts-ignore
               axiosHttpClient.axios.defaults.httpsAgent = httpsProxyAgent;
+
+              // Also inject Proxy-Authorization for HTTP (non-tunnel) connectivity
+              if (this.proxyHeaders) {
+                // @ts-ignore
+                Object.assign(axiosHttpClient.axios.defaults.headers.common, this.proxyHeaders);
+              }
+
               console.log("Forcibly injected proxy agents into internal ADTClient axios defaults.");
             }
           } catch (injectError) {
@@ -686,7 +697,7 @@ export class AbapAdtServer extends Server {
 
     // Update AuthHandlers with agents explicitly again to be safe
     if (this.authHandlers && (httpProxyAgent || httpsProxyAgent)) {
-      this.authHandlers.setProxyAgents(httpProxyAgent, httpsProxyAgent);
+      this.authHandlers.setProxyAgents(httpProxyAgent, httpsProxyAgent, this.proxyHeaders);
     }
 
     // Attempt login with new client to verify and establish session
@@ -705,7 +716,12 @@ export class AbapAdtServer extends Server {
           axiosHttpClient.axios.defaults.httpAgent = httpProxyAgent;
           // @ts-ignore
           axiosHttpClient.axios.defaults.httpsAgent = httpsProxyAgent;
-          console.log("Forcibly injected proxy agents into internal ADTClient axios defaults (reLogin).");
+
+          if (this.proxyHeaders) {
+            // @ts-ignore
+            Object.assign(axiosHttpClient.axios.defaults.headers.common, this.proxyHeaders);
+          }
+          console.log("Forcibly injected proxy agents and headers into internal ADTClient axios defaults (reLogin).");
         }
       }
     } catch (injectError) {

@@ -5,6 +5,7 @@ import type { ToolDefinition } from '../types/tools.js';
 export class AuthHandlers extends BaseHandler {
   private httpProxyAgent: any;
   private httpsProxyAgent: any;
+  private proxyHeaders: any;
 
   constructor(adtclient: any, private readonly onLogin?: (config: any) => Promise<any>) {
     super(adtclient);
@@ -145,9 +146,12 @@ export class AuthHandlers extends BaseHandler {
   }
 
   // Method to receive proxy agent from main server
-  public setProxyAgents(httpAgent: any, httpsAgent: any) {
+  public setProxyAgents(httpAgent: any, httpsAgent: any, headers?: any) {
     this.httpProxyAgent = httpAgent;
     this.httpsProxyAgent = httpsAgent;
+    if (headers) {
+      this.proxyHeaders = headers;
+    }
     console.log("[AuthHandlers] Proxy agents received (HTTP + HTTPS).");
   }
 
@@ -229,6 +233,7 @@ export class AuthHandlers extends BaseHandler {
             url: url,
             httpsAgent: agent,
             httpAgent: agent,
+            headers: this.proxyHeaders || {}, // Inject Proxy headers for HTTP requests
             timeout: 5000,
             validateStatus: () => true,
             responseType: 'text', // Force text to avoid parsing issues with error bodies
