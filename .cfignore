@@ -3,5 +3,9 @@ node_modules/
 .ds_store
 .env
 test/
-client/
-*.log
+client/node_modules/
+client/src/
+client/*.json
+client/*.config.js
+# client/dist MUST NOT be ignored
+
