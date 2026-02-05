@@ -1,0 +1,7 @@
+node_modules/
+.git/
+.ds_store
+.env
+test/
+client/
+*.log

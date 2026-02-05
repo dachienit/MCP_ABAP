@@ -708,9 +708,6 @@ export class AbapAdtServer extends Server {
       this.authHandlers.setProxyAgents(httpProxyAgent, httpsProxyAgent, this.proxyHeaders);
     }
 
-    // Attempt login with new client to verify and establish session
-    const result = await this.adtClient.login();
-
     // Brute-force: Manually inject proxy agent into the internal axios instance (for reLogin)
     try {
       if (httpsProxyAgent || httpProxyAgent) {
@@ -735,6 +732,9 @@ export class AbapAdtServer extends Server {
     } catch (injectError) {
       console.warn("Failed to force inject proxy agent in reLogin:", injectError);
     }
+
+    // Attempt login with new client to verify and establish session
+    const result = await this.adtClient.login();
 
     // If successful, mark as logged in
     this.isLoggedIn = true;
