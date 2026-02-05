@@ -338,6 +338,14 @@ export class AbapAdtServer extends Server {
 
     // Setup tool handlers
     this.setupToolHandlers();
+
+    // [CRITICAL FIX] Restore proxy agents if they exist
+    // When re-initializing handlers (e.g. after BTP connection setup or reLogin), 
+    // we must ensure the new AuthHandlers instance gets the proxy configuration.
+    if (this.httpProxyAgent || this.httpsProxyAgent) {
+      console.log("[initializeHandlers] Restoring proxy agents to new AuthHandlers instance.");
+      this.authHandlers.setProxyAgents(this.httpProxyAgent, this.httpsProxyAgent, this.proxyHeaders);
+    }
   }
 
   private serializeResult(result: any) {

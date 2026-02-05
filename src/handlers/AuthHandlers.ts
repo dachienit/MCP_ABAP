@@ -160,6 +160,17 @@ export class AuthHandlers extends BaseHandler {
     if (!baseUrl) return;
     console.log(`[PROBE] Starting connectivity probe to ${baseUrl}...`);
 
+    console.log(`[PROBE DEBUG] proxyHeaders present: ${!!this.proxyHeaders}`);
+    if (this.proxyHeaders) {
+      console.log(`[PROBE DEBUG] proxyHeaders keys: ${Object.keys(this.proxyHeaders).join(', ')}`);
+      // Validate token presence (partial log)
+      if (this.proxyHeaders['Proxy-Authorization']) {
+         console.log(`[PROBE DEBUG] Proxy-Authorization header set. Length: ${this.proxyHeaders['Proxy-Authorization'].length}`);
+      } else {
+         console.error(`[PROBE DEBUG] Proxy-Authorization header MISSING in proxyHeaders object!`);
+      }
+    }
+
     let agent: any;
     const isHttps = baseUrl.toLowerCase().startsWith('https:');
 
